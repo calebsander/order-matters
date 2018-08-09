@@ -1,0 +1,16 @@
+{
+	"name": "holey-array",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"build": "tsc",
+		"test": "npm run build && node test.js"
+	},
+	"author": "",
+	"license": "MIT",
+	"dependencies": {
+		"@types/node": "^10.5.5",
+		"typescript": "^3.0.1"
+	}
+}
