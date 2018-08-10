@@ -76,18 +76,19 @@ function *results(index = 0, remaining = k): IterableIterator<number[]> {
 const ENCODE_RESULTS = [...results()]
 assert.strictEqual(choose(n, k), BigInt(ENCODE_RESULTS.length))
 for (let i = 0; i < ENCODE_RESULTS.length; i++) {
-	assert.deepStrictEqual(encode(n, k, i), ENCODE_RESULTS[i])
+	assert.deepStrictEqual(encode(n, k, BigInt(i)), ENCODE_RESULTS[i])
 }
 for (let i = 0; i < 100; i++) {
-	assert.deepStrictEqual(encode(100, 1, i), [i])
+	assert.deepStrictEqual(encode(100, 1, BigInt(i)), [i])
 }
 
 const buffer = new ReorderingBuffer
+buffer.writeBytes(new Uint8Array([0xAA, 0xBB, 0xCC]).buffer)
 buffer.writeUnordered(new Array(10).fill(0).map((_, i) => new Uint8Array([10 - i]).buffer))
 buffer.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
 assert.deepStrictEqual(
 	new Uint8Array(buffer.toBuffer()),
-	new Uint8Array([3, 1, 7, 6, 5, 8, 9, 2, 4, 10, 0x12, 0x34])
-	//              0  1  X  1  2  X  X  6  5  X
+	new Uint8Array([0xAA, 0xBB, 0xCC, 3, 1, 7, 6, 5, 8, 9, 2, 4, 10, 0x12, 0x34])
+	//                                0  1  X  1  2  X  X  6  5  X
 	// 1 + 10 * (6 + 9 * (0 + 8 * (5 + 7 * (2 + 6 * 1)))) === 0xABCD
 )

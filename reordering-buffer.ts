@@ -32,8 +32,22 @@ export class NoReorderingBuffer extends ChunkedBuffer implements WritableBuffer 
 }
 
 export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
-	private possibilities = 1n
-	private readonly sets = new Set<UnorderedSet>()
+	private possibilities!: bigint
+	private valueToEncode!: bigint
+	private reachedBytesMask!: bigint
+	private sets!: UnorderedSet[]
+
+	constructor() {
+		super()
+		this.clearUnordered()
+	}
+
+	private clearUnordered() {
+		this.possibilities = 1n
+		this.valueToEncode = 0n
+		this.reachedBytesMask = -1n
+		this.sets = []
+	}
 
 	writeUnordered(chunks: ArrayBuffer[]) {
 		const {length} = chunks
@@ -47,13 +61,13 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 			}
 		}
 		groupStarts.push(groupStart)
-		const equalGroups = new Set<EqualGroup>()
+		const equalGroups: EqualGroup[] = []
 		let remainingLength = length
 		for (let i = 0; i < groupStarts.length; i++) {
 			const groupStart = groupStarts[i]
 			const elements = (groupStarts[i + 1] || length) - groupStart
 			const possibilities = choose(remainingLength, elements)
-			equalGroups.add({
+			equalGroups.push({
 				elements,
 				possibilities,
 				bytes: chunks[groupStart]
@@ -61,7 +75,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 			this.possibilities *= possibilities
 			remainingLength -= elements
 		}
-		this.sets.add({
+		this.sets.push({
 			startIndex: this.chunks.length,
 			openIndices: makeHoleyArray(length),
 			equalGroups
@@ -69,44 +83,35 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 		this.chunks.length += length
 	}
 	writeBytes(bytes: ArrayBuffer) {
-		let orderBytes = 0 // number of bytes which can be written by reordering unordered sets
-		for (
-			let possibilities = this.possibilities;
-			possibilities & ~0xFFn && orderBytes < bytes.byteLength;
-			orderBytes++, possibilities >>= 8n
-		);
 		const bytesArray = new Uint8Array(bytes)
-		let valueToEncode = 0n
-		for (let i = 0; i < orderBytes; i++) valueToEncode = valueToEncode << 8n | BigInt(bytesArray[i])
-		const reachedBytesMask = -1n << (BigInt(orderBytes) << 3n)
+		let orderBytes = 0 // number of bytes which can be written by reordering unordered sets
+		while (orderBytes < bytes.byteLength) {
+			const newReachedBytesMask = this.reachedBytesMask << 8n
+			if (!(this.possibilities & newReachedBytesMask)) break
+			this.valueToEncode = this.valueToEncode << 8n | BigInt(bytesArray[orderBytes++])
+			this.reachedBytesMask = newReachedBytesMask
+		}
+		if (orderBytes < bytes.byteLength) this.chunks.push(bytes.slice(orderBytes))
+	}
+	toBuffer() {
 		let reachedPossibilities = 1n
 		for (const set of this.sets) {
 			let {startIndex, equalGroups, openIndices} = set
-			for (const group of equalGroups) {
-				const {elements, bytes, possibilities} = group
-				const value = valueToEncode % possibilities
-				valueToEncode = valueToEncode / possibilities
-				const indices = encode(openIndices.length, elements, Number(value))
+			let groupIndex = 0
+			for (; groupIndex < equalGroups.length && !(reachedPossibilities & this.reachedBytesMask); groupIndex++) {
+				const {elements, bytes, possibilities} = equalGroups[groupIndex]
+				const value = this.valueToEncode % possibilities
+				this.valueToEncode /= possibilities
+				const indices = encode(openIndices.length, elements, value)
 				for (let i = 0; i < indices.length; i++) {
 					let index: number
 					({index, newArray: openIndices} = openIndices.lookup(indices[i] - i))
 					this.chunks[startIndex + index] = bytes
 				}
-				equalGroups.delete(group)
-				this.possibilities /= possibilities
 				reachedPossibilities *= possibilities
-				if (reachedPossibilities & reachedBytesMask) break
 			}
-			if (equalGroups.size) set.openIndices = openIndices
-			else this.sets.delete(set)
-			if (reachedPossibilities & reachedBytesMask) break
-		}
-		if (orderBytes < bytes.byteLength) this.chunks.push(bytes.slice(orderBytes))
-	}
-	toBuffer() {
-		for (const set of this.sets) {
-			let {startIndex, equalGroups, openIndices} = set
-			for (let {elements, bytes} of equalGroups) {
+			for (; groupIndex < equalGroups.length; groupIndex++) { //write out unused elements
+				let {elements, bytes} = equalGroups[groupIndex]
 				while (elements--) {
 					let index: number
 					({index, newArray: openIndices} = openIndices.lookup(0))
@@ -114,7 +119,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 				}
 			}
 		}
-		this.sets.clear()
+		this.clearUnordered()
 		return super.toBuffer()
 	}
 }
@@ -137,11 +142,12 @@ export function choose(n: number, k: number) {
 	for (let i = n - k; i > 1; i--) product /= BigInt(i)
 	return product
 }
-export function encode(length: number, elements: number, value: number) {
+export function encode(length: number, elements: number, value: bigint) {
+	const lengthMinus1 = length - 1
 	const indices: number[] = []
 	for (let i = 0, start = 0, remainingElements = elements - 1; i < elements; i++, remainingElements--) {
-		for (let possibilities = 0; ; start++) {
-			const newPossibilities = possibilities + Number(choose(length - start - 1, remainingElements))
+		for (let possibilities = 0n; ; start++) {
+			const newPossibilities = possibilities + choose(lengthMinus1 - start, remainingElements)
 			if (newPossibilities > value) {
 				value -= possibilities
 				break
@@ -161,5 +167,5 @@ interface EqualGroup {
 interface UnorderedSet {
 	startIndex: number
 	openIndices: HoleyArray
-	equalGroups: Set<EqualGroup>
+	equalGroups: EqualGroup[]
 }
