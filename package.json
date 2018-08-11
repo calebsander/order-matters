@@ -5,13 +5,12 @@
 	"main": "index.js",
 	"scripts": {
 		"build": "tsc",
-		"prepare": "cd node_modules/typescript && npm i && jake LKG",
 		"test": "npm run build && node test.js"
 	},
 	"author": "",
 	"license": "MIT",
 	"dependencies": {
 		"@types/node": "^10.5.5",
-		"typescript": "calebsander/TypeScript#feature/bigint"
+		"typescript": "calebsander/TypeScript#feature/bigint-lkg"
 	}
 }
