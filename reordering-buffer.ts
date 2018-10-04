@@ -2,7 +2,6 @@ import {makeHoleyArray} from './holey-array'
 
 const BYTE_BITS = 8
 const BYTE_POSSIBILITIES = 1 << BYTE_BITS
-const BIG_BYTE_BITS = BigInt(BYTE_BITS)
 
 export interface WritableBuffer {
 	writeBytes(bytes: ArrayBuffer): void
@@ -46,7 +45,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 
 		const {length} = chunks
 		chunks.sort(compare)
-		const groups: {start: number, bytes: ArrayBuffer}[] = []
+		const groups: EqualChunks[] = []
 		let start = 0, [startChunk] = chunks
 		for (let i = 1; i < length; i++) {
 			const chunk = chunks[i]
@@ -61,7 +60,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 		let remainingLength = length
 		for (let i = 0; i < groups.length; i++) {
 			const {start, bytes} = groups[i]
-			const nextGroup = groups[i + 1]
+			const nextGroup = groups[i + 1] as EqualChunks | undefined
 			const elements = (nextGroup ? nextGroup.start : length) - start
 			const possibilities = choose(remainingLength, elements)
 			equalGroups.push({
@@ -85,7 +84,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 		const {byteLength} = bytes
 		const bytesArray = new Uint8Array(bytes)
 		let orderBytes = 0 // number of bytes which can be written by reordering unordered sets
-		while (orderBytes < byteLength && this.possibilities >> BIG_BYTE_BITS) {
+		while (orderBytes < byteLength && this.possibilities >= BYTE_POSSIBILITIES) {
 			let byte = bytesArray[orderBytes++]
 			for (let possibilities = 1; !(possibilities >> BYTE_BITS);) {
 				const {currentSet, currentGroup} = this
@@ -140,7 +139,8 @@ export function compare(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
 
 	const array1 = new Uint8Array(buffer1),
 	      array2 = new Uint8Array(buffer2)
-	for (let i = 0; i < array1.length; i++) {
+	const {length} = array1
+	for (let i = 0; i < length; i++) {
 		const diff = array1[i] - array2[i]
 		if (diff) return diff
 	}
@@ -169,6 +169,10 @@ export function encode(length: number, elements: number, value: bigint) {
 	return indices
 }
 
+interface EqualChunks {
+	start: number
+	bytes: ArrayBuffer
+}
 interface EqualGroup {
 	readonly elements: number
 	readonly bytes: ArrayBuffer

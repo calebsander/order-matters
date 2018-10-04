@@ -85,6 +85,9 @@ for (let i = 0; i < 100; i++) {
 const buffer = new ReorderingBuffer
 buffer.writeBytes(new Uint8Array([0xAA, 0xBB, 0xCC]).buffer)
 buffer.writeUnordered(new Array(10).fill(0).map((_, i) => new Uint8Array([10 - i]).buffer))
+assert.strictEqual((buffer as any).possibilities, BigInt(10 * 9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1))
+assert.strictEqual((buffer as any).currentSet, 0)
+assert.strictEqual((buffer as any).currentGroup, 0)
 buffer.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
 assert.deepStrictEqual(
 	new Uint8Array(buffer.toBuffer()),
@@ -93,7 +96,7 @@ assert.deepStrictEqual(
 		Values:         1  2  3  4  5  6  7  8  9 10
 		Possibilities: 10  9  8  7  6  5  4  3  2  1
 		Split into:    10  9  3 -> 270 total possibilities
-		                      2  7  6  5 -> 420 total possibilities
+		                      2  7  6  4 -> 336 total possibilities
 		Encoded values:
 			0xAB == 1 + 10 * (8 + 9 * 1)
 			0xCD == 1 + 2 * (4 + 7 * (2 + 6 * 2))
@@ -102,6 +105,86 @@ assert.deepStrictEqual(
 			1 8 (1 + 3 * 1 == 4) 4 2 2 0 0 0  0
 	*/
 )
+assert.strictEqual((buffer as any).possibilities, 4n * 3n * 2n * 1n)
+assert.deepStrictEqual(
+	(buffer as any).sets[0].equalGroups.map((group: any) =>
+		({...group, bytes: new Uint8Array(group.bytes)})
+	),
+	[
+		{
+			elements: 1,
+			bytes: new Uint8Array([1]),
+			remainingPossibilities: 1n,
+			value: 1n,
+			usedPossibilities: 10n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([2]),
+			remainingPossibilities: 1n,
+			value: 8n,
+			usedPossibilities: 9n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([3]),
+			remainingPossibilities: 1n,
+			value: 1n + 1n * 3n,
+			usedPossibilities: 6n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([4]),
+			remainingPossibilities: 1n,
+			value: 4n,
+			usedPossibilities: 7n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([5]),
+			remainingPossibilities: 1n,
+			value: 2n,
+			usedPossibilities: 6n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([6]),
+			remainingPossibilities: 1n,
+			value: 2n,
+			usedPossibilities: 4n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([7]),
+			remainingPossibilities: 4n,
+			value: 0n,
+			usedPossibilities: 1n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([8]),
+			remainingPossibilities: 3n,
+			value: 0n,
+			usedPossibilities: 1n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([9]),
+			remainingPossibilities: 2n,
+			value: 0n,
+			usedPossibilities: 1n
+		},
+		{
+			elements: 1,
+			bytes: new Uint8Array([10]),
+			remainingPossibilities: 1n,
+			value: 0n,
+			usedPossibilities: 1n
+		}
+	]
+)
+assert.strictEqual((buffer as any).currentSet, 0)
+assert.strictEqual((buffer as any).currentGroup, 6)
 const buffer2 = new NoReorderingBuffer
 buffer2.writeBytes(new Uint8Array([0xAA, 0xBB, 0xCC]).buffer)
 buffer2.writeUnordered(new Array(10).fill(0).map((_, i) => new Uint8Array([10 - i]).buffer))
