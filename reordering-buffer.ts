@@ -1,4 +1,8 @@
-import {HoleyArray, makeHoleyArray} from './holey-array'
+import {makeHoleyArray} from './holey-array'
+
+const BYTE_BITS = 8
+const BYTE_POSSIBILITIES = 1 << BYTE_BITS
+const BIG_BYTE_BITS = BigInt(BYTE_BITS)
 
 export interface WritableBuffer {
 	writeBytes(bytes: ArrayBuffer): void
@@ -32,94 +36,100 @@ export class NoReorderingBuffer extends ChunkedBuffer implements WritableBuffer 
 }
 
 export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
-	private possibilities!: bigint
-	private valueToEncode!: bigint
-	private reachedBytesMask!: bigint
-	private sets!: UnorderedSet[]
-
-	constructor() {
-		super()
-		this.clearUnordered()
-	}
-
-	private clearUnordered() {
-		this.possibilities = 1n
-		this.valueToEncode = 0n
-		this.reachedBytesMask = -1n
-		this.sets = []
-	}
+	private possibilities = 1n
+	private sets: UnorderedSet[] = []
+	private currentSet = 0
+	private currentGroup = 0
 
 	writeUnordered(chunks: ArrayBuffer[]) {
+		if (!chunks.length) return // avoid adding a set with 0 equalGroups
+
 		const {length} = chunks
 		chunks.sort(compare)
-		const groupStarts: number[] = []
-		let groupStart = 0
+		const groups: {start: number, bytes: ArrayBuffer}[] = []
+		let start = 0, [startChunk] = chunks
 		for (let i = 1; i < length; i++) {
-			if (compare(chunks[groupStart], chunks[i])) { // new group
-				groupStarts.push(groupStart)
-				groupStart = i
+			const chunk = chunks[i]
+			if (compare(startChunk, chunk)) { // new group
+				groups.push({start, bytes: startChunk})
+				start = i
+				startChunk = chunk
 			}
 		}
-		groupStarts.push(groupStart)
+		groups.push({start, bytes: startChunk})
 		const equalGroups: EqualGroup[] = []
 		let remainingLength = length
-		for (let i = 0; i < groupStarts.length; i++) {
-			const groupStart = groupStarts[i]
-			const elements = (groupStarts[i + 1] || length) - groupStart
+		for (let i = 0; i < groups.length; i++) {
+			const {start, bytes} = groups[i]
+			const nextGroup = groups[i + 1]
+			const elements = (nextGroup ? nextGroup.start : length) - start
 			const possibilities = choose(remainingLength, elements)
 			equalGroups.push({
 				elements,
-				possibilities,
-				bytes: chunks[groupStart]
+				remainingPossibilities: possibilities,
+				bytes,
+				value: 0n,
+				usedPossibilities: 1n
 			})
 			this.possibilities *= possibilities
 			remainingLength -= elements
 		}
 		this.sets.push({
 			startIndex: this.chunks.length,
-			openIndices: makeHoleyArray(length),
+			length,
 			equalGroups
 		})
 		this.chunks.length += length
 	}
 	writeBytes(bytes: ArrayBuffer) {
+		const {byteLength} = bytes
 		const bytesArray = new Uint8Array(bytes)
 		let orderBytes = 0 // number of bytes which can be written by reordering unordered sets
-		while (orderBytes < bytes.byteLength) {
-			const newReachedBytesMask = this.reachedBytesMask << 8n
-			if (!(this.possibilities & newReachedBytesMask)) break
-			this.valueToEncode = this.valueToEncode << 8n | BigInt(bytesArray[orderBytes++])
-			this.reachedBytesMask = newReachedBytesMask
+		while (orderBytes < byteLength && this.possibilities >> BIG_BYTE_BITS) {
+			let byte = bytesArray[orderBytes++]
+			for (let possibilities = 1; !(possibilities >> BYTE_BITS);) {
+				const {currentSet, currentGroup} = this
+				const {equalGroups} = this.sets[currentSet]
+				const group = equalGroups[currentGroup]
+				const {usedPossibilities} = group
+				const groupPossibilities = group.remainingPossibilities
+				const remainingPossibilities = Math.ceil(BYTE_POSSIBILITIES / possibilities)
+				const possibilitiesToUse = groupPossibilities < remainingPossibilities
+					? Number(groupPossibilities)
+					: remainingPossibilities
+				let {value} = group
+				if (value) value *= usedPossibilities
+				group.value = value + BigInt(byte % possibilitiesToUse)
+				byte = (byte / possibilitiesToUse) | 0
+				const bigPossibilitiesToUse = BigInt(possibilitiesToUse)
+				group.usedPossibilities = usedPossibilities * bigPossibilitiesToUse
+				const newGroupPossibilities = group.remainingPossibilities = groupPossibilities / bigPossibilitiesToUse
+				if (newGroupPossibilities < 2) { // all group's possibilities have been used up
+					const newGroup = currentGroup + 1
+					if (newGroup < equalGroups.length) this.currentGroup = newGroup
+					else {
+						this.currentSet = currentSet + 1
+						this.currentGroup = 0
+					}
+				}
+				possibilities *= possibilitiesToUse
+				this.possibilities = this.possibilities / groupPossibilities * newGroupPossibilities
+			}
 		}
-		if (orderBytes < bytes.byteLength) this.chunks.push(bytes.slice(orderBytes))
+		if (orderBytes < byteLength) this.chunks.push(bytes.slice(orderBytes))
 	}
 	toBuffer() {
-		let reachedPossibilities = 1n
-		for (const set of this.sets) {
-			let {startIndex, equalGroups, openIndices} = set
-			let groupIndex = 0
-			for (; groupIndex < equalGroups.length && !(reachedPossibilities & this.reachedBytesMask); groupIndex++) {
-				const {elements, bytes, possibilities} = equalGroups[groupIndex]
-				const value = this.valueToEncode % possibilities
-				this.valueToEncode /= possibilities
+		for (const {startIndex, length, equalGroups} of this.sets) {
+			let openIndices = makeHoleyArray(length)
+			for (const {elements, bytes, value} of equalGroups) {
 				const indices = encode(openIndices.length, elements, value)
-				for (let i = 0; i < indices.length; i++) {
+				for (let i = 0; i < elements; i++) {
 					let index: number
 					({index, newArray: openIndices} = openIndices.lookup(indices[i] - i))
 					this.chunks[startIndex + index] = bytes
 				}
-				reachedPossibilities *= possibilities
-			}
-			for (; groupIndex < equalGroups.length; groupIndex++) { //write out unused elements
-				let {elements, bytes} = equalGroups[groupIndex]
-				while (elements--) {
-					let index: number
-					({index, newArray: openIndices} = openIndices.lookup(0))
-					this.chunks[startIndex + index] = bytes
-				}
 			}
 		}
-		this.clearUnordered()
 		return super.toBuffer()
 	}
 }
@@ -144,7 +154,7 @@ export function choose(n: number, k: number) {
 }
 export function encode(length: number, elements: number, value: bigint) {
 	const lengthMinus1 = length - 1
-	const indices: number[] = []
+	const indices = new Array<number>(elements)
 	for (let i = 0, start = 0, remainingElements = elements - 1; i < elements; i++, remainingElements--) {
 		for (let possibilities = 0n; ; start++) {
 			const newPossibilities = possibilities + choose(lengthMinus1 - start, remainingElements)
@@ -154,18 +164,20 @@ export function encode(length: number, elements: number, value: bigint) {
 			}
 			else possibilities = newPossibilities
 		}
-		indices.push(start++)
+		indices[i] = start++
 	}
 	return indices
 }
 
 interface EqualGroup {
-	elements: number
-	possibilities: bigint // choose(remainingLength, elements)
-	bytes: ArrayBuffer
+	readonly elements: number
+	readonly bytes: ArrayBuffer
+	remainingPossibilities: bigint // initially choose(remainingLength, elements)
+	value: bigint
+	usedPossibilities: bigint
 }
 interface UnorderedSet {
 	startIndex: number
-	openIndices: HoleyArray
+	length: number
 	equalGroups: EqualGroup[]
 }

@@ -64,7 +64,7 @@ for (const {n, k, result} of CHOOSE_RESULTS) {
 	assert.strictEqual(choose(n, k), result, `Expected ${n} choose ${k} to be ${result}, got ${choose(n, k)}`)
 }
 const n = 20, k = 5
-function *results(index = 0, remaining = k): IterableIterator<number[]> {
+function* results(index = 0, remaining = k): IterableIterator<number[]> {
 	if (!remaining) {
 		yield []
 		return
@@ -88,9 +88,19 @@ buffer.writeUnordered(new Array(10).fill(0).map((_, i) => new Uint8Array([10 - i
 buffer.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
 assert.deepStrictEqual(
 	new Uint8Array(buffer.toBuffer()),
-	new Uint8Array([0xAA, 0xBB, 0xCC, 3, 1, 7, 6, 5, 8, 9, 2, 4, 10, 0x12, 0x34])
-	//                                0  1  X  1  2  X  X  6  5  X
-	// 1 + 10 * (6 + 9 * (0 + 8 * (5 + 7 * (2 + 6 * 1)))) === 0xABCD
+	new Uint8Array([0xAA, 0xBB, 0xCC, 7, 1, 8, 5, 6, 3, 4, 9, 10, 2, 0x12, 0x34])
+	/*
+		Values:         1  2  3  4  5  6  7  8  9 10
+		Possibilities: 10  9  8  7  6  5  4  3  2  1
+		Split into:    10  9  3 -> 270 total possibilities
+		                      2  7  6  5 -> 420 total possibilities
+		Encoded values:
+			0xAB == 1 + 10 * (8 + 9 * 1)
+			0xCD == 1 + 2 * (4 + 7 * (2 + 6 * 2))
+
+			1 2               3  4 5 6 7 8 9 10
+			1 8 (1 + 3 * 1 == 4) 4 2 2 0 0 0  0
+	*/
 )
 const buffer2 = new NoReorderingBuffer
 buffer2.writeBytes(new Uint8Array([0xAA, 0xBB, 0xCC]).buffer)
