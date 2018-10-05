@@ -1,6 +1,8 @@
 import * as assert from 'assert'
+import {decode} from './decode'
 import {HoleyArray, makeHoleyArray} from './holey-array'
-import {choose, encode, NoReorderingBuffer, ReorderingBuffer} from './reordering-buffer'
+import {encode, NoReorderingBuffer, ReorderingBuffer} from './reordering-buffer'
+import {choose} from './util'
 
 const TEST_TIMES = 1e5
 const MAX_ARRAY_SIZE = 100
@@ -76,10 +78,16 @@ function* results(index = 0, remaining = k): IterableIterator<number[]> {
 const ENCODE_RESULTS = [...results()]
 assert.strictEqual(choose(n, k), BigInt(ENCODE_RESULTS.length))
 for (let i = 0; i < ENCODE_RESULTS.length; i++) {
-	assert.deepStrictEqual(encode(n, k, BigInt(i)), ENCODE_RESULTS[i])
+	const value = BigInt(i)
+	const encoded = encode(n, k, value)
+	assert.deepStrictEqual(encoded, ENCODE_RESULTS[i])
+	assert.strictEqual(decode(n, encoded), value)
 }
 for (let i = 0; i < 100; i++) {
-	assert.deepStrictEqual(encode(100, 1, BigInt(i)), [i])
+	const value = BigInt(i)
+	const encoded = encode(100, 1, value)
+	assert.deepStrictEqual(encoded, [i])
+	assert.strictEqual(decode(100, encoded), value)
 }
 
 const buffer = new ReorderingBuffer

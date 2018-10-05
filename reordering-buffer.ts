@@ -1,4 +1,5 @@
 import {makeHoleyArray} from './holey-array'
+import {choose} from './util'
 
 const BYTE_BITS = 8
 const BYTE_POSSIBILITIES = 1 << BYTE_BITS
@@ -145,12 +146,6 @@ export function compare(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
 		if (diff) return diff
 	}
 	return 0
-}
-export function choose(n: number, k: number) {
-	let product = 1n
-	for (let i = n; i > k; i--) product *= BigInt(i)
-	for (let i = n - k; i > 1; i--) product /= BigInt(i)
-	return product
 }
 export function encode(length: number, elements: number, value: bigint) {
 	const lengthMinus1 = length - 1
