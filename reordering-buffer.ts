@@ -1,8 +1,9 @@
-import {makeHoleyArray} from './holey-array'
+import {HoleyArray, makeHoleyArray} from './holey-array'
 import {choose} from './util'
 
 const BYTE_BITS = 8
 const BYTE_POSSIBILITIES = 1 << BYTE_BITS
+const EMPTY = new ArrayBuffer(0)
 
 export interface WritableBuffer {
 	writeBytes(bytes: ArrayBuffer): void
@@ -10,9 +11,13 @@ export interface WritableBuffer {
 	toBuffer(): ArrayBuffer
 }
 
-class ChunkedBuffer {
+abstract class ChunkedBuffer {
 	protected readonly chunks: ArrayBuffer[] = []
 
+	writeBytes(bytes: ArrayBuffer) {
+		this.writeUnordered([bytes])
+	}
+	abstract writeUnordered(chunks: ArrayBuffer[]): void
 	toBuffer() {
 		let length = 0
 		for (const chunk of this.chunks) length += chunk.byteLength
@@ -27,11 +32,8 @@ class ChunkedBuffer {
 }
 
 export class NoReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
-	writeBytes(bytes: ArrayBuffer) {
-		this.chunks.push(bytes)
-	}
 	writeUnordered(chunks: ArrayBuffer[]) {
-		for (const chunk of chunks) this.writeBytes(chunk)
+		for (const chunk of chunks) this.chunks.push(chunk)
 	}
 }
 
@@ -59,6 +61,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 		groups.push({start, bytes: startChunk})
 		const equalGroups: EqualGroup[] = []
 		let remainingLength = length
+		let newPossibilities = 1n
 		for (let i = 0; i < groups.length; i++) {
 			const {start, bytes} = groups[i]
 			const nextGroup = groups[i + 1] as EqualChunks | undefined
@@ -71,55 +74,65 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 				value: 0n,
 				usedPossibilities: 1n
 			})
-			this.possibilities *= possibilities
+			newPossibilities *= possibilities
 			remainingLength -= elements
 		}
+		let bytesToEncode = 0
+		const encodeSources: EncodeSource[] = []
+		encodeBytes: for (const chunk of chunks) {
+			const {byteLength} = chunk
+			for (let byte = 0; byte < byteLength; byte++, bytesToEncode++) {
+				if (this.possibilities < BYTE_POSSIBILITIES) break encodeBytes
+				for (let possibilities = 1; possibilities < BYTE_POSSIBILITIES;) {
+					const {equalGroups} = this.sets[this.currentSet]
+					const group = equalGroups[this.currentGroup]
+					const {usedPossibilities, remainingPossibilities: groupPossibilities} = group
+					const remainingPossibilities = Math.ceil(BYTE_POSSIBILITIES / possibilities)
+					const possibilitiesToUse = groupPossibilities < remainingPossibilities
+						? Number(groupPossibilities)
+						: remainingPossibilities
+					const bigPossibilitiesToUse = BigInt(possibilitiesToUse)
+					group.usedPossibilities = usedPossibilities * bigPossibilitiesToUse
+					const newGroupPossibilities = group.remainingPossibilities = groupPossibilities / bigPossibilitiesToUse
+					if (newGroupPossibilities < 2) { // all group's possibilities have been used up
+						if (this.currentGroup + 1 < equalGroups.length) this.currentGroup++
+						else {
+							this.currentSet++
+							this.currentGroup = 0
+						}
+					}
+					possibilities *= possibilitiesToUse
+					this.possibilities = this.possibilities / groupPossibilities * newGroupPossibilities
+					encodeSources.push({
+						group,
+						preUsedPossibilities: usedPossibilities,
+						possibilitiesToUse
+					})
+				}
+			}
+		}
+		this.possibilities *= newPossibilities
 		this.sets.push({
 			startIndex: this.chunks.length,
 			length,
-			equalGroups
+			equalGroups,
+			bytesToEncode,
+			encodeSources
 		})
 		this.chunks.length += length
 	}
-	writeBytes(bytes: ArrayBuffer) {
-		const {byteLength} = bytes
-		const bytesArray = new Uint8Array(bytes)
-		let orderBytes = 0 // number of bytes which can be written by reordering unordered sets
-		while (orderBytes < byteLength && this.possibilities >= BYTE_POSSIBILITIES) {
-			let byte = bytesArray[orderBytes++]
-			for (let possibilities = 1; !(possibilities >> BYTE_BITS);) {
-				const {currentSet, currentGroup} = this
-				const {equalGroups} = this.sets[currentSet]
-				const group = equalGroups[currentGroup]
-				const {usedPossibilities} = group
-				const groupPossibilities = group.remainingPossibilities
-				const remainingPossibilities = Math.ceil(BYTE_POSSIBILITIES / possibilities)
-				const possibilitiesToUse = groupPossibilities < remainingPossibilities
-					? Number(groupPossibilities)
-					: remainingPossibilities
-				let {value} = group
-				if (value) value *= usedPossibilities
-				group.value = value + BigInt(byte % possibilitiesToUse)
-				byte = (byte / possibilitiesToUse) | 0
-				const bigPossibilitiesToUse = BigInt(possibilitiesToUse)
-				group.usedPossibilities = usedPossibilities * bigPossibilitiesToUse
-				const newGroupPossibilities = group.remainingPossibilities = groupPossibilities / bigPossibilitiesToUse
-				if (newGroupPossibilities < 2) { // all group's possibilities have been used up
-					const newGroup = currentGroup + 1
-					if (newGroup < equalGroups.length) this.currentGroup = newGroup
-					else {
-						this.currentSet = currentSet + 1
-						this.currentGroup = 0
-					}
-				}
-				possibilities *= possibilitiesToUse
-				this.possibilities = this.possibilities / groupPossibilities * newGroupPossibilities
-			}
-		}
-		if (orderBytes < byteLength) this.chunks.push(bytes.slice(orderBytes))
-	}
 	toBuffer() {
-		for (const {startIndex, length, equalGroups} of this.sets) {
+		// Must order later sets first since their ordering determines which bytes
+		// to encode into earlier sets
+		for (let set = this.sets.length - 1; set >= 0; set--) {
+			const {
+				startIndex,
+				length,
+				equalGroups,
+				bytesToEncode,
+				encodeSources
+			} = this.sets[set]
+			// Reorder set based on values of each group
 			let openIndices = makeHoleyArray(length)
 			for (const {elements, bytes, value} of equalGroups) {
 				const indices = encode(openIndices.length, elements, value)
@@ -128,6 +141,25 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 					({index, newArray: openIndices} = openIndices.lookup(indices[i] - i))
 					this.chunks[startIndex + index] = bytes
 				}
+			}
+			// Encode leading bytes' values into previous sets
+			if (bytesToEncode) {
+				let encodeIndex = 0
+				let currentChunk = startIndex, chunkByte = 0
+				for (let byte = 0; byte < bytesToEncode; byte++) {
+					while (chunkByte === this.chunks[currentChunk].byteLength) {
+						this.chunks[currentChunk++] = EMPTY
+						chunkByte = 0
+					}
+					let byteValue = new Uint8Array(this.chunks[currentChunk])[chunkByte++]
+					for (let possibilities = 1; possibilities < BYTE_POSSIBILITIES;) {
+						const {group, preUsedPossibilities, possibilitiesToUse} = encodeSources[encodeIndex++]
+						group.value += preUsedPossibilities * BigInt(byteValue % possibilitiesToUse)
+						byteValue = (byteValue / possibilitiesToUse) | 0
+						possibilities *= possibilitiesToUse
+					}
+				}
+				this.chunks[currentChunk] = this.chunks[currentChunk].slice(chunkByte)
 			}
 		}
 		return super.toBuffer()
@@ -175,8 +207,15 @@ interface EqualGroup {
 	value: bigint
 	usedPossibilities: bigint
 }
+interface EncodeSource {
+	group: EqualGroup
+	preUsedPossibilities: bigint
+	possibilitiesToUse: number
+}
 interface UnorderedSet {
 	startIndex: number
 	length: number
 	equalGroups: EqualGroup[]
+	bytesToEncode: number
+	encodeSources: EncodeSource[]
 }
