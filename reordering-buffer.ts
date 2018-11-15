@@ -6,18 +6,18 @@ const BYTE_POSSIBILITIES = 1 << BYTE_BITS
 const EMPTY = new ArrayBuffer(0)
 
 export interface WritableBuffer {
-	writeBytes(bytes: ArrayBuffer): void
-	writeUnordered(chunks: ArrayBuffer[]): void
-	toBuffer(): ArrayBuffer
+	writeBytes(bytes: ArrayBufferLike): void
+	writeUnordered(chunks: ArrayBufferLike[]): void
+	toBuffer(): ArrayBufferLike
 }
 
 abstract class ChunkedBuffer {
-	protected readonly chunks: ArrayBuffer[] = []
+	protected readonly chunks: ArrayBufferLike[] = []
 
-	writeBytes(bytes: ArrayBuffer) {
+	writeBytes(bytes: ArrayBufferLike) {
 		this.writeUnordered([bytes])
 	}
-	abstract writeUnordered(chunks: ArrayBuffer[]): void
+	abstract writeUnordered(chunks: ArrayBufferLike[]): void
 	toBuffer() {
 		let length = 0
 		for (const chunk of this.chunks) length += chunk.byteLength
@@ -32,7 +32,7 @@ abstract class ChunkedBuffer {
 }
 
 export class NoReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
-	writeUnordered(chunks: ArrayBuffer[]) {
+	writeUnordered(chunks: ArrayBufferLike[]) {
 		for (const chunk of chunks) this.chunks.push(chunk)
 	}
 }
@@ -43,7 +43,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 	private currentSet = 0
 	private currentGroup = 0
 
-	writeUnordered(chunks: ArrayBuffer[]) {
+	writeUnordered(chunks: ArrayBufferLike[]) {
 		if (!chunks.length) return // avoid adding a set with 0 equalGroups
 
 		const {length} = chunks
@@ -166,7 +166,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 	}
 }
 
-export function compare(buffer1: ArrayBuffer, buffer2: ArrayBuffer) {
+export function compare(buffer1: ArrayBufferLike, buffer2: ArrayBufferLike) {
 	const lengthDiff = buffer1.byteLength - buffer2.byteLength
 	if (lengthDiff) return lengthDiff
 
@@ -198,11 +198,11 @@ export function encode(length: number, elements: number, value: bigint) {
 
 interface EqualChunks {
 	start: number
-	bytes: ArrayBuffer
+	bytes: ArrayBufferLike
 }
 interface EqualGroup {
 	readonly elements: number
-	readonly bytes: ArrayBuffer
+	readonly bytes: ArrayBufferLike
 	remainingPossibilities: bigint // initially choose(remainingLength, elements)
 	value: bigint
 	usedPossibilities: bigint
