@@ -1,8 +1,6 @@
-import {HoleyArray, makeHoleyArray} from './holey-array'
-import {choose} from './util'
+import {makeHoleyArray} from './holey-array'
+import {BYTE_POSSIBILITIES, choose, compare} from './util'
 
-const BYTE_BITS = 8
-const BYTE_POSSIBILITIES = 1 << BYTE_BITS
 const EMPTY = new ArrayBuffer(0)
 
 export interface WritableBuffer {
@@ -44,9 +42,9 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 	private currentGroup = 0
 
 	writeUnordered(chunks: ArrayBufferLike[]) {
-		if (!chunks.length) return // avoid adding a set with 0 equalGroups
-
 		const {length} = chunks
+		if (!length) return // avoid adding a set with 0 equalGroups
+
 		chunks.sort(compare)
 		const groups: EqualChunks[] = []
 		let start = 0, [startChunk] = chunks
@@ -133,7 +131,7 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 				encodeSources
 			} = this.sets[set]
 			// Reorder set based on values of each group
-			let openIndices = makeHoleyArray(length)
+			let openIndices = makeHoleyArray(length, false)
 			for (const {elements, bytes, value} of equalGroups) {
 				const indices = encode(openIndices.length, elements, value)
 				for (let i = 0; i < elements; i++) {
@@ -166,19 +164,6 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 	}
 }
 
-export function compare(buffer1: ArrayBufferLike, buffer2: ArrayBufferLike) {
-	const lengthDiff = buffer1.byteLength - buffer2.byteLength
-	if (lengthDiff) return lengthDiff
-
-	const array1 = new Uint8Array(buffer1),
-	      array2 = new Uint8Array(buffer2)
-	const {length} = array1
-	for (let i = 0; i < length; i++) {
-		const diff = array1[i] - array2[i]
-		if (diff) return diff
-	}
-	return 0
-}
 export function encode(length: number, elements: number, value: bigint) {
 	const lengthMinus1 = length - 1
 	const indices = new Array<number>(elements)

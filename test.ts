@@ -1,6 +1,6 @@
 import * as assert from 'assert'
-import {decode} from './decode'
-import {HoleyArray, makeHoleyArray} from './holey-array'
+import {decode, ReorderingReader} from './decode'
+import {makeHoleyArray} from './holey-array'
 import {encode, NoReorderingBuffer, ReorderingBuffer} from './reordering-buffer'
 import {choose} from './util'
 
@@ -29,7 +29,8 @@ class MarkedArray {
 
 for (let _ = 0; _ < TEST_TIMES; _++) {
 	let length = rand(MAX_ARRAY_SIZE)
-	let holeyArray: HoleyArray = makeHoleyArray(length)
+	let holeyArray = makeHoleyArray(length, false)
+	let reverseHoleyArray = makeHoleyArray(length, true)
 	const markedArray = new MarkedArray(length)
 	const addIndices: number[] = []
 	while (length) {
@@ -40,6 +41,9 @@ for (let _ = 0; _ < TEST_TIMES; _++) {
 		const markedIndex = markedArray.lookup(addIndex)
 		assert.strictEqual(index, markedIndex)
 		assert.strictEqual(holeyArray.totalHoles, addIndices.length)
+		let reverseIndex: number
+		({index: reverseIndex, newArray: reverseHoleyArray} = reverseHoleyArray.lookup(index))
+		assert.strictEqual(reverseIndex, addIndex)
 	}
 }
 
@@ -98,8 +102,9 @@ assert.strictEqual((buffer as any).currentSet, 0)
 assert.strictEqual((buffer as any).currentGroup, 0)
 buffer.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
 assert.strictEqual((buffer as any).possibilities, 4n * 3n * 2n * 1n)
+const reorderedBuffer = buffer.toBuffer()
 assert.deepStrictEqual(
-	new Uint8Array(buffer.toBuffer()),
+	new Uint8Array(reorderedBuffer),
 	new Uint8Array([0xAA, 0xBB, 0xCC, 7, 1, 8, 5, 6, 3, 4, 9, 10, 2, 0x12, 0x34])
 	/*
 		Values:         1  2  3  4  5  6  7  8  9 10
@@ -220,4 +225,36 @@ buffer2.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
 assert.deepStrictEqual(
 	new Uint8Array(buffer2.toBuffer()),
 	new Uint8Array([0xAA, 0xBB, 0xCC, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0xAB, 0xCD, 0x12, 0x34])
+)
+
+const readBuffer = new ReorderingReader(reorderedBuffer)
+assert.deepStrictEqual(
+	new Uint8Array(readBuffer.readBytes(3)),
+	new Uint8Array([0xAA, 0xBB, 0xCC])
+)
+const unorderedChunks: ArrayBufferLike[] = []
+for (let i = 0; i < 10; i++) unorderedChunks.push(readBuffer.readBytes(1))
+assert.deepStrictEqual(
+	new Set(unorderedChunks.map(chunk => new Uint8Array(chunk))),
+	new Set(new Array(10).fill(0).map((_, i) => new Uint8Array([i + 1])))
+)
+readBuffer.addUnorderedSet(unorderedChunks)
+assert.strictEqual((readBuffer as any).possibilities, BigInt(10 * 9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1))
+assert.deepStrictEqual((readBuffer as any).groupValues, new Set([
+	{possibilities: 10n, value: 1n},
+	{possibilities: 9n,  value: 8n},
+	{possibilities: 8n,  value: 4n},
+	{possibilities: 7n,  value: 4n},
+	{possibilities: 6n,  value: 2n},
+	{possibilities: 5n,  value: 2n},
+	{possibilities: 4n,  value: 0n},
+	{possibilities: 3n,  value: 0n},
+	{possibilities: 2n,  value: 0n},
+	{possibilities: 1n,  value: 0n}
+]))
+assert.deepStrictEqual(new Uint8Array(readBuffer.readBytes(4)), new Uint8Array([0xAB, 0xCD, 0x12, 0x34]))
+assert.strictEqual((readBuffer as any).possibilities, 4n * 3n * 2n * 1n)
+assert.deepStrictEqual(
+	(readBuffer as any).groupValues,
+	new Set(new Array(4).fill(0).map((_, i) => ({possibilities: BigInt(4 - i), value: 0n})))
 )
