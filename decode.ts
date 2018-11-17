@@ -59,7 +59,7 @@ export class ReorderingReader extends BufferReader implements ReadableBuffer {
 			encodedBytes[encodedByteCount++] = byte
 		}
 		const chunk = new Uint8Array(length)
-		if (encodedByteCount) chunk.set(encodedBytes, 0)
+		if (encodedByteCount) chunk.set(encodedBytes)
 		const unencodedByteCount = length - encodedByteCount
 		if (unencodedByteCount) {
 			chunk.set(new Uint8Array(super.readBytes(unencodedByteCount)), encodedByteCount)
@@ -90,18 +90,17 @@ export class ReorderingReader extends BufferReader implements ReadableBuffer {
 			})
 			this.possibilities *= possibilities
 		}
-		const [firstChunk] = sortedChunks
-		let {chunk} = firstChunk, indices = [firstChunk.index]
-		for (let i = 1; i < length; i++) {
+		let chunk: ArrayBufferLike, indices: number[]
+		for (let i = 0; i < length; i++) {
 			const {chunk: nextChunk, index} = sortedChunks[i]
-			if (compare(chunk, nextChunk)) { // new group
-				addGroup(indices)
+			if (!i || compare(chunk!, nextChunk)) { // new group
+				if (i) addGroup(indices!)
 				chunk = nextChunk
 				indices = []
 			}
-			indices.push(index)
+			indices!.push(index)
 		}
-		addGroup(indices)
+		addGroup(indices!)
 	}
 }
 

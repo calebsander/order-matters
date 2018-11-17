@@ -1,5 +1,3 @@
-import assert from 'assert'
-
 export interface LookupResult {
 	index: number
 	newArray: HoleyArray
@@ -40,12 +38,13 @@ class SplitSegment implements HoleyArray {
 		private readonly reverse: boolean
 	) {
 		this.length = this.left.length + this.right.length
-		this.totalHoles = this.left.totalHoles + 1 + this.right.totalHoles
+		this.totalHoles = reverse
+			? 0
+			: this.left.totalHoles + 1 + this.right.totalHoles
 	}
 
 	lookup(lookupIndex: number): LookupResult {
 		const splitRelativeIndex = lookupIndex - this.splitIndex
-		if (this.reverse) assert(splitRelativeIndex)
 		if (splitRelativeIndex < 0) {
 			const {index, newArray} = this.left.lookup(lookupIndex)
 			return {
@@ -60,8 +59,11 @@ class SplitSegment implements HoleyArray {
 		}
 		else {
 			const {index, newArray} = this.right.lookup(splitRelativeIndex)
+			const skipIndices = this.reverse
+				? this.left.length - 1
+				: this.left.totalHoles + this.splitIndex + 1
 			return {
-				index: (this.reverse ? this.left.length - 1 : this.left.totalHoles + this.splitIndex + 1) + index,
+				index: skipIndices + index,
 				newArray: new SplitSegment(this.splitIndex, this.left, newArray, this.reverse)
 			}
 		}
