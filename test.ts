@@ -1,7 +1,7 @@
 import * as assert from 'assert'
 import {decode, ReorderingReader} from './decode'
 import {makeHoleyArray} from './holey-array'
-import {encode, NoReorderingBuffer, ReorderingBuffer} from './reordering-buffer'
+import {encode, NoReorderingBuffer, ReorderingBuffer} from './encode'
 import {choose} from './util'
 
 const TEST_TIMES = 1e5
