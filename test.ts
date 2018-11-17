@@ -2,7 +2,7 @@ import * as assert from 'assert'
 import {decode, ReorderingReader} from './decode'
 import {makeHoleyArray} from './holey-array'
 import {encode, NoReorderingBuffer, ReorderingBuffer} from './encode'
-import {choose} from './util'
+import {BYTE_POSSIBILITIES, choose} from './util'
 
 const TEST_TIMES = 1e5
 const MAX_ARRAY_SIZE = 100
@@ -258,3 +258,27 @@ assert.deepStrictEqual(
 	(readBuffer as any).groupValues,
 	new Set(new Array(4).fill(0).map((_, i) => ({possibilities: BigInt(4 - i), value: 0n})))
 )
+
+for (let _ = 0; _ < TEST_TIMES; _++) {
+	const sets = new Array(rand(10)).fill(0).map(_ => {
+		const chunkLength = rand(10)
+		return new Array(rand(10)).fill(0).map(_ => {
+			const buffer = new Uint8Array(chunkLength)
+			for (let i = 0; i < chunkLength; i++) buffer[i] = rand(BYTE_POSSIBILITIES)
+			return buffer.buffer
+		})
+	})
+	const writer = new ReorderingBuffer
+	for (const set of sets) writer.writeUnordered(set)
+	const buffer = writer.toBuffer()
+	const reader = new ReorderingReader(buffer)
+	for (const set of sets) {
+		const readChunks = set.map(({byteLength}) => reader.readBytes(byteLength))
+		assert.deepStrictEqual(
+			new Set(set.map(chunk => new Uint8Array(chunk))),
+			new Set(readChunks.map(chunk => new Uint8Array(chunk)))
+		)
+		reader.addUnorderedSet(readChunks)
+	}
+	assert.strictEqual((reader as any).readPosition, buffer.byteLength)
+}
