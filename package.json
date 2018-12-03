@@ -10,7 +10,7 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
-		"@types/node": "^10.11.4",
-		"typescript": "next"
+		"@types/node": "^10.12.12",
+		"typescript": "^3.2.1"
 	}
 }
