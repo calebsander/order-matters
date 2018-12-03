@@ -25,10 +25,6 @@ abstract class BufferReader {
 	}
 }
 
-export class NoReorderingReader extends BufferReader implements ReadableBuffer {
-	addUnorderedSet() {}
-}
-
 export class ReorderingReader extends BufferReader implements ReadableBuffer {
 	private possibilities = 1n
 	private groupValues = new Set<GroupValue>() // TODO: use a circular buffer queue instead

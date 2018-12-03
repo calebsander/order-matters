@@ -1,7 +1,7 @@
 import * as assert from 'assert'
 import {decode, ReorderingReader} from './decode'
 import {makeHoleyArray} from './holey-array'
-import {encode, NoReorderingBuffer, ReorderingBuffer} from './encode'
+import {encode, ReorderingBuffer} from './encode'
 import {BYTE_POSSIBILITIES, choose} from './util'
 
 const TEST_TIMES = 1e5
@@ -218,14 +218,6 @@ assert.deepStrictEqual(
 )
 assert.strictEqual((buffer as any).currentSet, 1)
 assert.strictEqual((buffer as any).currentGroup, 6)
-const buffer2 = new NoReorderingBuffer
-buffer2.writeBytes(new Uint8Array([0xAA, 0xBB, 0xCC]).buffer)
-buffer2.writeUnordered(new Array(10).fill(0).map((_, i) => new Uint8Array([10 - i]).buffer))
-buffer2.writeBytes(new Uint8Array([0xAB, 0xCD, 0x12, 0x34]).buffer)
-assert.deepStrictEqual(
-	new Uint8Array(buffer2.toBuffer()),
-	new Uint8Array([0xAA, 0xBB, 0xCC, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0xAB, 0xCD, 0x12, 0x34])
-)
 
 const readBuffer = new ReorderingReader(reorderedBuffer)
 assert.deepStrictEqual(

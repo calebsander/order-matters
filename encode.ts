@@ -29,12 +29,6 @@ abstract class ChunkedBuffer {
 	}
 }
 
-export class NoReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
-	writeUnordered(chunks: ArrayBufferLike[]) {
-		for (const chunk of chunks) this.chunks.push(chunk)
-	}
-}
-
 export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 	private possibilities = 1n
 	private sets: UnorderedSet[] = []
