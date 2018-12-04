@@ -2,15 +2,17 @@
 	"name": "order-matters",
 	"version": "1.0.0",
 	"description": "",
-	"main": "index.js",
+	"main": "dist/index.js",
+	"types": "dist/index",
 	"scripts": {
 		"build": "tsc",
-		"test": "npm run build && node test"
+		"test": "npm run build && tsc -p test-tsconfig.json && ava"
 	},
-	"author": "",
+	"author": "Caleb Sander",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^10.12.12",
+		"ava": "^1.0.0-rc.2",
 		"typescript": "^3.2.1"
 	}
 }
