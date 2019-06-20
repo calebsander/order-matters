@@ -6,13 +6,13 @@
 	"types": "dist/index",
 	"scripts": {
 		"build": "tsc",
-		"test": "npm run build && tsc -p test-tsconfig.json && ava"
+		"test": "npm run build && tsc -p test-tsconfig.json && ava -v"
 	},
 	"author": "Caleb Sander",
 	"license": "MIT",
 	"devDependencies": {
-		"@types/node": "^10.12.12",
-		"ava": "^1.0.0-rc.2",
-		"typescript": "^3.2.1"
+		"@types/node": "^12.0.8",
+		"ava": "^2.1.0",
+		"typescript": "^3.5.2"
 	}
 }
