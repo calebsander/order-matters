@@ -125,12 +125,12 @@ export class ReorderingBuffer extends ChunkedBuffer implements WritableBuffer {
 				encodeSources
 			} = this.sets[set]
 			// Reorder set based on values of each group
-			let openIndices = makeHoleyArray(length, false)
+			let openIndices = makeHoleyArray(length)
 			for (const {elements, bytes, value} of equalGroups) {
-				const indices = encode(openIndices.length, elements, value)
+				const indices = encode(openIndices.spaces, elements, value)
 				for (let i = 0; i < elements; i++) {
 					let index: number
-					({index, newArray: openIndices} = openIndices.lookup(indices[i] - i))
+					({index, newArray: openIndices} = openIndices.lookup(indices[i] - i, false))
 					this.chunks[startIndex + index] = bytes
 				}
 			}

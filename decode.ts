@@ -69,14 +69,14 @@ export class ReorderingReader extends BufferReader implements ReadableBuffer {
 		const sortedChunks = chunks
 			.map((chunk, index) => ({chunk, index}))
 			.sort((a, b) => compare(a.chunk, b.chunk) || a.index - b.index)
-		let holeyArray = makeHoleyArray(length, true)
+		let holeyArray = makeHoleyArray(length)
 		const addGroup = (indices: number[]) => {
 			const elements = indices.length
 			const contiguousIndices = new Array<number>(elements)
-			const remainingElements = holeyArray.length
+			const remainingElements = holeyArray.spaces
 			for (let i = 0; i < elements; i++) {
 				let index: number
-				({index, newArray: holeyArray} = holeyArray.lookup(indices[i]))
+				({index, newArray: holeyArray} = holeyArray.lookup(indices[i], true))
 				contiguousIndices[i] = index + i
 			}
 			const possibilities = choose(remainingElements, elements)

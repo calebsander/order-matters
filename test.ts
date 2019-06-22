@@ -40,26 +40,27 @@ function simpleReorderedBuffer(t: ExecutionContext<{}>) {
 }
 
 test('holey-array', t => {
-	const TEST_TIMES = 1e5
-	const MAX_ARRAY_SIZE = 100
+	const TEST_TIMES = 10
+	const MAX_ARRAY_SIZE = 1e5
 	for (let _ = 0; _ < TEST_TIMES; _++) {
 		let length = rand(MAX_ARRAY_SIZE)
-		let holeyArray = makeHoleyArray(length, false)
-		let reverseHoleyArray = makeHoleyArray(length, true)
+		let holeyArray = makeHoleyArray(length)
+		let reverseHoleyArray = makeHoleyArray(length)
 		const markedArray = new MarkedArray(length)
-		const addIndices: number[] = []
 		while (length) {
 			const addIndex = rand(length--)
-			addIndices.push(addIndex)
 			let index: number
-			({index, newArray: holeyArray} = holeyArray.lookup(addIndex))
+			({index, newArray: holeyArray} = holeyArray.lookup(addIndex, false))
 			const markedIndex = markedArray.lookup(addIndex)
 			t.is(index, markedIndex)
-			t.is(holeyArray.totalHoles, addIndices.length)
-			let reverseIndex: number
-			({index: reverseIndex, newArray: reverseHoleyArray} = reverseHoleyArray.lookup(index))
-			t.is(reverseIndex, addIndex)
+			t.is(holeyArray.spaces, length)
+			;({index, newArray: reverseHoleyArray} = reverseHoleyArray.lookup(index, true))
+			t.is(index, addIndex)
+			t.is(reverseHoleyArray.spaces, length)
 		}
+		// Ensure holey arrays are coalesced to a single HolesNode
+		t.is(holeyArray.constructor.name, 'HolesNode')
+		t.is(reverseHoleyArray.constructor.name, 'HolesNode')
 	}
 })
 test('choose', t => {

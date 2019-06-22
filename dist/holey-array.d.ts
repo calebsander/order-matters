@@ -3,8 +3,7 @@ export interface LookupResult {
     newArray: HoleyArray;
 }
 export interface HoleyArray {
-    readonly length: number;
-    readonly totalHoles: number;
-    lookup(lookupIndex: number): LookupResult;
+    readonly spaces: number;
+    lookup(lookupIndex: number, reverse: boolean): LookupResult;
 }
-export declare const makeHoleyArray: (length: number, reverse: boolean) => HoleyArray;
+export declare const makeHoleyArray: (length: number) => HoleyArray;

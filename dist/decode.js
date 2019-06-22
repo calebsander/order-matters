@@ -66,14 +66,14 @@ class ReorderingReader extends BufferReader {
         const sortedChunks = chunks
             .map((chunk, index) => ({ chunk, index }))
             .sort((a, b) => util_1.compare(a.chunk, b.chunk) || a.index - b.index);
-        let holeyArray = holey_array_1.makeHoleyArray(length, true);
+        let holeyArray = holey_array_1.makeHoleyArray(length);
         const addGroup = (indices) => {
             const elements = indices.length;
             const contiguousIndices = new Array(elements);
-            const remainingElements = holeyArray.length;
+            const remainingElements = holeyArray.spaces;
             for (let i = 0; i < elements; i++) {
                 let index;
-                ({ index, newArray: holeyArray } = holeyArray.lookup(indices[i]));
+                ({ index, newArray: holeyArray } = holeyArray.lookup(indices[i], true));
                 contiguousIndices[i] = index + i;
             }
             const possibilities = util_1.choose(remainingElements, elements);

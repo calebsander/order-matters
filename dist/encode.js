@@ -117,12 +117,12 @@ class ReorderingBuffer extends ChunkedBuffer {
         for (let set = this.sets.length - 1; set >= 0; set--) {
             const { startIndex, length, equalGroups, bytesToEncode, encodeSources } = this.sets[set];
             // Reorder set based on values of each group
-            let openIndices = holey_array_1.makeHoleyArray(length, false);
+            let openIndices = holey_array_1.makeHoleyArray(length);
             for (const { elements, bytes, value } of equalGroups) {
-                const indices = encode(openIndices.length, elements, value);
+                const indices = encode(openIndices.spaces, elements, value);
                 for (let i = 0; i < elements; i++) {
                     let index;
-                    ({ index, newArray: openIndices } = openIndices.lookup(indices[i] - i));
+                    ({ index, newArray: openIndices } = openIndices.lookup(indices[i] - i, false));
                     this.chunks[startIndex + index] = bytes;
                 }
             }
